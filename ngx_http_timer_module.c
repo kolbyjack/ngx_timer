@@ -16,6 +16,7 @@ typedef struct {
 
 static void *ngx_http_timer_create_conf(ngx_conf_t *cf);
 static ngx_int_t ngx_http_timer_init_worker(ngx_cycle_t *cycle);
+static void ngx_http_timer_exit_worker(ngx_cycle_t *cycle);
 static void ngx_http_timer_tick(ngx_event_t *ev);
 
 
@@ -44,7 +45,7 @@ ngx_module_t  ngx_http_timer_module = {
     ngx_http_timer_init_worker,            /* init process */
     NULL,                                  /* init thread */
     NULL,                                  /* exit thread */
-    NULL,                                  /* exit process */
+    ngx_http_timer_exit_worker,            /* exit process */
     NULL,                                  /* exit master */
     NGX_MODULE_V1_PADDING
 };
@@ -86,8 +87,29 @@ ngx_http_timer_init_worker(ngx_cycle_t *cycle)
 
 
 static void
+ngx_http_timer_exit_worker(ngx_cycle_t *cycle)
+{
+    ngx_http_timer_conf_t   *tcf;
+
+    if (NGX_PROCESS_WORKER != ngx_process) {
+        return;
+    }
+
+    tcf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_timer_module);
+
+    if (tcf->event.timer_set) {
+        ngx_del_timer(&tcf->event);
+    }
+}
+
+
+static void
 ngx_http_timer_tick(ngx_event_t *ev)
 {
+    if (ngx_terminate || ngx_exiting) {
+        return;
+    }
+
     ngx_log_error(NGX_LOG_INFO, ngx_cycle->log, 0, "tick");
 
     ngx_add_timer(ev, 5000);
